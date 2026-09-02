@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBS WebSocket Control Panel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        .status {
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #555;
+        }
+        .status.connected {
+            color: green;
+        }
+        .status.disconnected {
+            color: red;
+        }
+        .status.error {
+            color: orange;
+        }
+        .controls button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        .controls button:hover {
+            background-color: #2980b9;
+        }
+        .controls button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .scene-buttons button {
+            background-color: #2ecc71;
+        }
+        .scene-buttons button:hover {
+            background-color: #27ae60;
+        }
+        .stream-buttons button.stop {
+            background-color: #e74c3c;
+        }
+        .stream-buttons button.stop:hover {
+            background-color: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OBS Control Panel</h1>
+        <div id="streamStatus" class="status disconnected">Status: Disconnected</div>
+
+        <div class="controls">
+            <h2>Stream Controls</h2>
+            <div class="stream-buttons">
+                <button id="btnStartStream">Start Stream</button>
+                <button id="btnStopStream" class="stop">Stop Stream</button>
+            </div>
+
+            <h2>Scene Controls</h2>
+            <div class="scene-buttons">
+                <button id="btnSceneGame">Game Scene</button>
+                <button id="btnSceneChat">Chat Scene</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('streamStatus');
+        const btnStartStream = document.getElementById('btnStartStream');
+        const btnStopStream = document.getElementById('btnStopStream');
+        const btnSceneGame = document.getElementById('btnSceneGame');
+        const btnSceneChat = document.getElementById('btnSceneChat');
+
+        let websocket = null;
+        const OBS_WEBSOCKET_URL = "ws://localhost:4444"; // Default OBS WebSocket URL
+
+        // Function to update the UI status
+        function updateStatus(message, className) {
+            statusDiv.textContent = `Status: ${message}`;
+            statusDiv.className = `status ${className}`;
+        }
+
+        // Establishes a WebSocket connection to OBS Studio
+        function connectWebSocket() {
+            if (websocket && (websocket.readyState === WebSocket.OPEN || websocket.readyState === WebSocket.CONNECTING)) {
+                console.log("WebSocket already connected or connecting.");
+                return;
+            }
+
+            websocket = new WebSocket(OBS_WEBSOCKET_URL);
+
+            websocket.onopen = () => {
+                updateStatus("Connected", "connected");
+                console.log("Connected to OBS WebSocket!");
+                // OBS WebSocket v5 requires authentication. For this simple example,
+                // we're assuming no authentication or a pre-authenticated session.
+                // A real app would send an "Identify" message here.
+            };
+
+            websocket.onmessage = (event) => {
+                console.log("Message from OBS:", event.data);
+                // Parse and handle messages from OBS (e.g., stream status updates, scene changes)
+                // For this example, we just log them.
+            };
+
+            websocket.onclose = () => {
+                updateStatus("Disconnected", "disconnected");
+                console.log("OBS WebSocket disconnected.");
+                // Attempt to reconnect after a delay
+                setTimeout(connectWebSocket, 5000);
+            };
+
+            websocket.onerror = (error) => {
+                updateStatus("Error", "error");
+                console.error("OBS WebSocket error:", error);
+                websocket.close(); // Close to trigger onclose and reconnection attempt
+            };
+        }
+
+        // Sends a command to OBS via WebSocket
+        // This uses the OBS WebSocket v5 protocol structure for requests.
+        function sendCommand(requestType, requestData = {}) {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                const message = {
+                    op: 6, // Op code 6 is for "Request" in OBS WebSocket v5
+                    d: {
+                        requestType: requestType,
+                        requestId: crypto.randomUUID(), // Unique ID for tracking requests
+                        requestData: requestData
+                    }
+                };
+                websocket.send(JSON.stringify(message));
+                console.log(`Sent command: ${requestType}`, message);
+            } else {
+                console.warn("WebSocket not connected. Cannot send command.");
+                updateStatus("Not Connected (Command Failed)", "error");
+            }
+        }
+
+        // Event Listeners for buttons
+        btnStartStream.addEventListener('click', () => {
+            // OBS WebSocket v5 request to start streaming
+            sendCommand("StartStream");
+        });
+
+        btnStopStream.addEventListener('click', () => {
+            // OBS WebSocket v5 request to stop streaming
+            sendCommand("StopStream");
+        });
+
+        btnSceneGame.addEventListener('click', () => {
+            // OBS WebSocket v5 request to set the current program scene
+            sendCommand("SetCurrentProgramScene", { sceneName: "Game Scene" });
+        });
+
+        btnSceneChat.addEventListener('click', () => {
+            // OBS WebSocket v5 request to set the current program scene
+            sendCommand("SetCurrentProgramScene", { sceneName: "Chat Scene" });
+        });
+
+        // Initialize WebSocket connection when the page loads
+        window.addEventListener('load', connectWebSocket);
+    </script>
+</body>
+</html>
